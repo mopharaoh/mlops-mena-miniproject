@@ -2,42 +2,45 @@
 name = "prodml"
 version = "0.1.0"
 description = "Production-ready House Prices ML service"
-readme = "README.md"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11"
 
 dependencies = [
-    "pandas",
-    "scikit-learn",
-    "joblib",
-    "pyarrow",
-    "python-json-logger",
-    "numpy",
-    "skl2onnx",
-    "onnx",
-    "onnxruntime",
     "fastapi",
     "uvicorn",
     "pydantic",
     "pydantic-settings",
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "joblib",
+    "onnx",
+    "onnxruntime",
+    "skl2onnx",
+    "python-json-logger",
+    "httpx2>=2.13.0",
 ]
 
-
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
     "pytest",
     "pytest-cov",
+    "httpx",
     "ruff",
     "black",
     "mypy",
-    "httpx",
     "pre-commit",
 ]
 
 [project.scripts]
 prodml-train = "prodml.train:main"
+prodml-export = "prodml.export:main"
+prodml-benchmark = "prodml.benchmark:main"
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = [
+    "setuptools>=68",
+]
+
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -45,3 +48,16 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=src/prodml --cov-fail-under=70"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.black]
+line-length = 88
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+]

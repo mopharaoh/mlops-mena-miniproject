@@ -1,1 +1,1 @@
-"""FastAPI application package for the prodml service."""
+"""FastAPI application package."""

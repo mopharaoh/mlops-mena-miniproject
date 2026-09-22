@@ -1,82 +1,246 @@
+import logging
 import time
-from collections.abc import Callable
+from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
-from typing import Any
-import logging
+from typing import Any, Callable, TypeVar
+
 import joblib
+import numpy as np
 import pandas as pd
+from sklearn.pipeline import Pipeline
+
+from prodml.features import (
+    fill_categorical_missing_values,
+)
 
 logger = logging.getLogger(__name__)
 
-def timed(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Measure and print function execution time."""
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+class FeatureValidationError(ValueError):
+    """Raised when an input contains unknown feature names."""
+
+
+def timed(func: F) -> F:
+    """Measure execution time for a function."""
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         start = time.perf_counter()
 
-        result = func(*args, **kwargs)
+        try:
+            return func(*args, **kwargs)
+        finally:
+            latency_ms = (
+                time.perf_counter() - start
+            ) * 1000
 
-        elapsed = time.perf_counter() - start
-
-        logger.info(
-            "Function execution completed",
-            extra={
-                "function": func.__name__,
-                "latency_ms": elapsed * 1000,
-            },
-        )
-
-        return result
-
-    return wrapper
-
-
-class HousePricePredictor:
-    """Load a trained House Prices model and make predictions."""
-
-    def __init__(self, model_path: Path) -> None:
-        self.model_path = model_path
-        self.model = None
-
-    def load(self) -> None:
-        
-
-        if not self.model_path.exists():
-            raise FileNotFoundError(
-                f"Model not found: {self.model_path}"
+            logger.debug(
+                "Prediction method completed",
+                extra={
+                    "latency_ms": latency_ms,
+                },
             )
 
-        self.model = joblib.load(self.model_path)
+    return wrapper  # type: ignore[return-value]
+
+
+@dataclass
+class HousePricePredictor:
+    """
+    Production inference interface.
+
+    The predictor owns:
+    - the fitted sklearn pipeline
+    - categorical fill values
+    - model version
+
+    The API does not need access to the training dataset.
+    """
+
+    model: Pipeline
+    categorical_fill_values: dict[str, str]
+    model_version: str = "1.0.0"
+
+    @classmethod
+    def load(
+        cls,
+        model_path: Path,
+        model_version: str = "1.0.0",
+    ) -> "HousePricePredictor":
+        """Load the complete predictor artifact."""
+
+        if not model_path.exists():
+            raise FileNotFoundError(
+                f"Model artifact not found: {model_path}"
+            )
+
+        predictor = joblib.load(
+            model_path
+        )
+
+        if not isinstance(
+            predictor,
+            cls,
+        ):
+            raise TypeError(
+                "The model artifact must contain "
+                "a HousePricePredictor."
+            )
+
+        return predictor
+
+    @property
+    def feature_names(self) -> list[str]:
+        """Return features expected by the model."""
+
+        if not hasattr(
+            self.model,
+            "feature_names_in_",
+        ):
+            raise AttributeError(
+                "The trained model does not expose "
+                "feature_names_in_."
+            )
+
+        return list(
+            self.model.feature_names_in_
+        )
+
+    @property
+    def categorical_features(self) -> list[str]:
+        """Return categorical feature names."""
+
+        return list(
+            self.categorical_fill_values.keys()
+        )
+
+    def _validate_features(
+        self,
+        features: dict[str, Any],
+    ) -> None:
+        """Validate feature names."""
+
+        expected = set(
+            self.feature_names
+        )
+
+        received = set(features)
+
+        unknown_features = sorted(
+            received - expected
+        )
+
+        if unknown_features:
+            raise FeatureValidationError(
+                "Unknown features: "
+                + ", ".join(
+                    unknown_features
+                )
+            )
+
+    def _to_dataframe(
+        self,
+        features: dict[str, Any],
+    ) -> pd.DataFrame:
+        """Convert request features to a model dataframe."""
+
+        self._validate_features(
+            features
+        )
+
+        dataframe = pd.DataFrame(
+            [features],
+            columns=self.feature_names,
+        )
+
+        dataframe = (
+            fill_categorical_missing_values(
+                dataframe,
+                self.categorical_features,
+                self.categorical_fill_values,
+            )
+        )
+
+        return dataframe
 
     @timed
     def predict_one(
         self,
-        features: pd.DataFrame,
+        features: dict[str, Any],
     ) -> float:
-        """Predict the house price for one sample."""
+        """Generate one prediction."""
 
-        if self.model is None:
-            raise RuntimeError(
-                "Model is not loaded. Call load() first."
-            )
+        features_df = self._to_dataframe(
+            features
+        )
 
-        prediction = self.model.predict(features)
+        prediction = self.model.predict(
+            features_df
+        )
 
-        return float(prediction[0])
+        return float(
+            prediction[0]
+        )
 
+    @timed
     def predict_batch(
         self,
-        features: pd.DataFrame,
+        features: list[dict[str, Any]],
     ) -> list[float]:
-        """Predict house prices for multiple samples."""
+        """Generate predictions for multiple inputs."""
 
-        if self.model is None:
-            raise RuntimeError(
-                "Model is not loaded. Call load() first."
+        if not features:
+            raise ValueError(
+                "At least one feature set is required."
             )
 
-        predictions = self.model.predict(features)
+        frames = [
+            self._to_dataframe(
+                row
+            )
+            for row in features
+        ]
 
-        return predictions.tolist()
+        features_df = pd.concat(
+            frames,
+            ignore_index=True,
+        )
+
+        predictions = self.model.predict(
+            features_df
+        )
+
+        return [
+            float(value)
+            for value in np.asarray(
+                predictions
+            ).reshape(-1)
+        ]
+
+    def prepare_for_onnx(
+        self,
+        features: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """
+        Prepare features for ONNX Runtime.
+
+        The same categorical fill values used during
+        API inference are applied here.
+        """
+
+        prepared = features.copy()
+
+        prepared = (
+            fill_categorical_missing_values(
+                prepared,
+                self.categorical_features,
+                self.categorical_fill_values,
+            )
+        )
+
+        return prepared[
+            self.feature_names
+        ].copy()

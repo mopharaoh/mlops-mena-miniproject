@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -7,48 +8,55 @@ from skl2onnx.common.data_types import (
     StringTensorType,
 )
 
+from prodml.config import settings
+from prodml.data import (
+    load_data,
+    split_features_target,
+    train_validation_split,
+)
+from prodml.logging_conf import configure_logging
+from prodml.predict import HousePricePredictor
 
-def build_initial_types(
-    features: pd.DataFrame,
-) -> list[tuple[str, object]]:
-    """Build ONNX input definitions from dataframe columns."""
+logger = logging.getLogger(__name__)
 
-    initial_types: list[tuple[str, object]] = []
 
-    for column in features.columns:
+def export_to_onnx(
+    predictor: HousePricePredictor,
+    sample_features: pd.DataFrame,
+    output_path: Path,
+) -> None:
+    """Export the fitted sklearn pipeline to ONNX."""
+
+    prepared = predictor.prepare_for_onnx(
+        sample_features
+    )
+
+    initial_types = []
+
+    for column in predictor.feature_names:
         if pd.api.types.is_numeric_dtype(
-            features[column]
+            prepared[column]
         ):
             initial_types.append(
                 (
                     column,
-                    FloatTensorType([None, 1]),
+                    FloatTensorType(
+                        [None, 1]
+                    ),
                 )
             )
         else:
             initial_types.append(
                 (
                     column,
-                    StringTensorType([None, 1]),
+                    StringTensorType(
+                        [None, 1]
+                    ),
                 )
             )
 
-    return initial_types
-
-
-def export_to_onnx(
-    model,
-    sample_features: pd.DataFrame,
-    output_path: Path,
-) -> None:
-    """Export a fitted scikit-learn pipeline to ONNX."""
-
-    initial_types = build_initial_types(
-        sample_features
-    )
-
     onnx_model = convert_sklearn(
-        model,
+        predictor.model,
         initial_types=initial_types,
         target_opset=17,
     )
@@ -61,3 +69,49 @@ def export_to_onnx(
     output_path.write_bytes(
         onnx_model.SerializeToString()
     )
+
+    logger.info(
+        "ONNX model exported",
+        extra={
+            "output_path": str(
+                output_path
+            ),
+        },
+    )
+
+
+def main() -> None:
+    """Export the trained model to ONNX."""
+
+    configure_logging()
+
+    df = load_data(
+        settings.data_path
+    )
+
+    X, y = split_features_target(
+        df,
+        settings.target_column,
+    )
+
+    _, X_val, _, _ = train_validation_split(
+        X,
+        y,
+        validation_size=settings.validation_size,
+        random_state=settings.random_state,
+    )
+
+    predictor = HousePricePredictor.load(
+        settings.model_path,
+        settings.model_version,
+    )
+
+    export_to_onnx(
+        predictor=predictor,
+        sample_features=X_val.iloc[:1],
+        output_path=settings.onnx_model_path,
+    )
+
+
+if __name__ == "__main__":
+    main()

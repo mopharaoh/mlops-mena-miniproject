@@ -11,15 +11,17 @@ from sklearn.pipeline import Pipeline
 
 from prodml.config import settings
 from prodml.data import (
-    fill_categorical_missing_values,
-    get_categorical_fill_values,
     load_data,
     split_features_target,
     train_validation_split,
 )
-from prodml.features import build_preprocessor
+from prodml.features import (
+    build_preprocessor,
+    fill_categorical_missing_values,
+    get_categorical_fill_values,
+)
 from prodml.logging_conf import configure_logging
-
+from prodml.predict import HousePricePredictor
 
 logger = logging.getLogger(__name__)
 
@@ -30,52 +32,69 @@ def train_model(
     target_column: str,
     validation_size: float,
     random_state: int,
+    model_version: str,
 ) -> dict[str, float]:
-    """Train and persist the House Prices model."""
+    """Train and persist the complete House Prices predictor."""
 
-    df = load_data(data_path)
+    df = load_data(
+        data_path
+    )
 
     X, y = split_features_target(
         df,
         target_column,
     )
 
-    X_train, X_val, y_train, y_val = train_validation_split(
-        X,
-        y,
-        validation_size=validation_size,
-        random_state=random_state,
+    X_train, X_val, y_train, y_val = (
+        train_validation_split(
+            X,
+            y,
+            validation_size=validation_size,
+            random_state=random_state,
+        )
     )
 
     numeric_features = (
         X_train
-        .select_dtypes(include=["number"])
+        .select_dtypes(
+            include=["number"]
+        )
         .columns
         .tolist()
     )
 
     categorical_features = (
         X_train
-        .select_dtypes(exclude=["number"])
+        .select_dtypes(
+            exclude=["number"]
+        )
         .columns
         .tolist()
     )
 
-    fill_values = get_categorical_fill_values(
-        X_train,
-        categorical_features,
+    # Learn categorical fill values from training data only.
+    categorical_fill_values = (
+        get_categorical_fill_values(
+            X_train,
+            categorical_features,
+        )
     )
 
-    X_train = fill_categorical_missing_values(
-        X_train,
-        categorical_features,
-        fill_values,
+    # Apply the learned values to both training and validation data.
+    X_train = (
+        fill_categorical_missing_values(
+            X_train,
+            categorical_features,
+            categorical_fill_values,
+        )
     )
 
-    X_val = fill_categorical_missing_values(
-        X_val,
-        categorical_features,
-        fill_values,
+    X_val = (
+        fill_categorical_missing_values(
+            X_val,
+            categorical_features,
+            categorical_fill_values,
+        )
     )
 
     preprocessor = build_preprocessor(
@@ -110,7 +129,9 @@ def train_model(
         y_train,
     )
 
-    predictions = model.predict(X_val)
+    predictions = model.predict(
+        X_val
+    )
 
     mae = mean_absolute_error(
         y_val,
@@ -122,20 +143,33 @@ def train_model(
         predictions,
     ) ** 0.5
 
+    predictor = HousePricePredictor(
+        model=model,
+        categorical_fill_values=(
+            categorical_fill_values
+        ),
+        model_version=model_version,
+    )
+
     model_path.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
+    # Save the complete predictor artifact.
+    # This contains both the model and the learned
+    # categorical preprocessing information.
     joblib.dump(
-        model,
+        predictor,
         model_path,
     )
 
     logger.info(
         "Model artifact saved",
         extra={
-            "model_path": str(model_path),
+            "model_path": str(
+                model_path
+            ),
         },
     )
 
@@ -156,14 +190,18 @@ def main() -> None:
         target_column=settings.target_column,
         validation_size=settings.validation_size,
         random_state=settings.random_state,
+        model_version=settings.model_version,
     )
 
     logger.info(
         "Model training completed",
         extra={
+            "model": "LinearRegression",
             "mae": metrics["mae"],
             "rmse": metrics["rmse"],
-            "model_path": str(settings.model_path),
+            "model_path": str(
+                settings.model_path
+            ),
         },
     )
 
