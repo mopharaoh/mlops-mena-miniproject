@@ -18,6 +18,9 @@ dependencies = [
     "skl2onnx",
     "python-json-logger",
     "httpx2>=2.13.0",
+    "mlflow>=3.16.1",
+    "boto3>=1.43.101",
+    "dvc>=3.67.1",
 ]
 
 [project.optional-dependencies]

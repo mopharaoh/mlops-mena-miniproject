@@ -28,3 +28,85 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: mlops-postgres
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    ports:
+      - "5432:5432"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    restart: unless-stopped
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+
+    image: prodml-mlflow:2.17.2
+
+    container_name: mlops-mlflow
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - "5000:5000"
+
+    environment:
+      MLFLOW_TRACKING_URI: http://0.0.0.0:5000
+
+    command:
+      - mlflow
+      - server
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - --default-artifact-root
+      - /mlruns
+      - --serve-artifacts
+
+    volumes:
+      - mlflow_data:/mlruns
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+
+    restart: unless-stopped
+
+
+volumes:
+  postgres_data:
+  mlflow_data:

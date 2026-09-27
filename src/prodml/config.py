@@ -36,5 +36,7 @@ class Settings(BaseSettings):
 
     api_port: int = 8000
 
+    mlflow_tracking_uri: str = "http://localhost:5000"
+    mlflow_experiment_name: str = "house-prices"
 
 settings = Settings()
