@@ -10,7 +10,7 @@ __pycache__/
 .venv/
 
 # Data & artifacts 
-data/
+dvc-storage/
 models/
 reports/
 

@@ -39,9 +39,7 @@ def fill_categorical_missing_values(
     X = X.copy()
 
     for column in categorical_features:
-        X[column] = X[column].fillna(
-            fill_values[column]
-        )
+        X[column] = X[column].fillna(fill_values[column])
 
     return X
 
@@ -62,9 +60,7 @@ def build_preprocessor(
         steps=[
             (
                 "imputer",
-                SimpleImputer(
-                    strategy="median"
-                ),
+                SimpleImputer(strategy="median"),
             ),
             (
                 "scaler",

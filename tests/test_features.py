@@ -112,7 +112,7 @@ def test_preprocessor_handles_unknown_categories(unknown_value):
     transformed = preprocessor.transform(test)
 
     assert transformed.shape[0] == 1
-    if hasattr(transformed, "toarray"):    
+    if hasattr(transformed, "toarray"):
         transformed = transformed.toarray()
 
 
@@ -141,5 +141,5 @@ def test_preprocessor_handles_numeric_missing_values():
     transformed = preprocessor.transform(test)
 
     assert transformed.shape[0] == 1
-    if hasattr(transformed, "toarray"):  
+    if hasattr(transformed, "toarray"):
         transformed = transformed.toarray()

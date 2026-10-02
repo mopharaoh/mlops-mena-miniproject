@@ -1,9 +1,10 @@
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import joblib
 import numpy as np
@@ -33,9 +34,7 @@ def timed(func: F) -> F:
         try:
             return func(*args, **kwargs)
         finally:
-            latency_ms = (
-                time.perf_counter() - start
-            ) * 1000
+            latency_ms = (time.perf_counter() - start) * 1000
 
             logger.debug(
                 "Prediction method completed",
@@ -73,22 +72,15 @@ class HousePricePredictor:
         """Load the complete predictor artifact."""
 
         if not model_path.exists():
-            raise FileNotFoundError(
-                f"Model artifact not found: {model_path}"
-            )
+            raise FileNotFoundError(f"Model artifact not found: {model_path}")
 
-        predictor = joblib.load(
-            model_path
-        )
+        predictor = joblib.load(model_path)
 
         if not isinstance(
             predictor,
             cls,
         ):
-            raise TypeError(
-                "The model artifact must contain "
-                "a HousePricePredictor."
-            )
+            raise TypeError("The model artifact must contain " "a HousePricePredictor.")
 
         return predictor
 
@@ -101,21 +93,16 @@ class HousePricePredictor:
             "feature_names_in_",
         ):
             raise AttributeError(
-                "The trained model does not expose "
-                "feature_names_in_."
+                "The trained model does not expose " "feature_names_in_."
             )
 
-        return list(
-            self.model.feature_names_in_
-        )
+        return list(self.model.feature_names_in_)
 
     @property
     def categorical_features(self) -> list[str]:
         """Return categorical feature names."""
 
-        return list(
-            self.categorical_fill_values.keys()
-        )
+        return list(self.categorical_fill_values.keys())
 
     def _validate_features(
         self,
@@ -123,22 +110,20 @@ class HousePricePredictor:
     ) -> None:
         """Validate feature names."""
 
-        expected = set(
-            self.feature_names
-        )
+        expected = set(self.feature_names)
 
         received = set(features)
+        missing_features = expected - received
 
-        unknown_features = sorted(
-            received - expected
-        )
+        if missing_features:
+            raise FeatureValidationError(
+                "Missing required features: " + ", ".join(sorted(missing_features))
+            )
+        unknown_features = sorted(received - expected)
 
         if unknown_features:
             raise FeatureValidationError(
-                "Unknown features: "
-                + ", ".join(
-                    unknown_features
-                )
+                "Unknown features: " + ", ".join(unknown_features)
             )
 
     def _to_dataframe(
@@ -147,21 +132,17 @@ class HousePricePredictor:
     ) -> pd.DataFrame:
         """Convert request features to a model dataframe."""
 
-        self._validate_features(
-            features
-        )
+        self._validate_features(features)
 
         dataframe = pd.DataFrame(
             [features],
             columns=self.feature_names,
         )
 
-        dataframe = (
-            fill_categorical_missing_values(
-                dataframe,
-                self.categorical_features,
-                self.categorical_fill_values,
-            )
+        dataframe = fill_categorical_missing_values(
+            dataframe,
+            self.categorical_features,
+            self.categorical_fill_values,
         )
 
         return dataframe
@@ -173,17 +154,11 @@ class HousePricePredictor:
     ) -> float:
         """Generate one prediction."""
 
-        features_df = self._to_dataframe(
-            features
-        )
+        features_df = self._to_dataframe(features)
 
-        prediction = self.model.predict(
-            features_df
-        )
+        prediction = self.model.predict(features_df)
 
-        return float(
-            prediction[0]
-        )
+        return float(prediction[0])
 
     @timed
     def predict_batch(
@@ -193,32 +168,18 @@ class HousePricePredictor:
         """Generate predictions for multiple inputs."""
 
         if not features:
-            raise ValueError(
-                "At least one feature set is required."
-            )
+            raise ValueError("At least one feature set is required.")
 
-        frames = [
-            self._to_dataframe(
-                row
-            )
-            for row in features
-        ]
+        frames = [self._to_dataframe(row) for row in features]
 
         features_df = pd.concat(
             frames,
             ignore_index=True,
         )
 
-        predictions = self.model.predict(
-            features_df
-        )
+        predictions = self.model.predict(features_df)
 
-        return [
-            float(value)
-            for value in np.asarray(
-                predictions
-            ).reshape(-1)
-        ]
+        return [float(value) for value in np.asarray(predictions).reshape(-1)]
 
     def prepare_for_onnx(
         self,
@@ -233,14 +194,10 @@ class HousePricePredictor:
 
         prepared = features.copy()
 
-        prepared = (
-            fill_categorical_missing_values(
-                prepared,
-                self.categorical_features,
-                self.categorical_fill_values,
-            )
+        prepared = fill_categorical_missing_values(
+            prepared,
+            self.categorical_features,
+            self.categorical_fill_values,
         )
 
-        return prepared[
-            self.feature_names
-        ].copy()
+        return prepared[self.feature_names].copy()

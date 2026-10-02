@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import joblib
 import pandas as pd
 import pytest
@@ -131,6 +129,7 @@ def test_feature_names_without_model_metadata(
     trained_model,
 ):
     """feature_names should fail if the model lacks feature_names_in_."""
+
     class ModelWithoutFeatureNames:
         pass
 

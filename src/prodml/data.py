@@ -19,9 +19,7 @@ def split_features_target(
     """Separate features from the target column."""
 
     if target_column not in df.columns:
-        raise ValueError(
-            f"Target column '{target_column}' not found."
-        )
+        raise ValueError(f"Target column '{target_column}' not found.")
 
     X = df.drop(columns=[target_column])
     y = df[target_column]

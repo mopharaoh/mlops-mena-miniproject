@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 
 import joblib
+import mlflow
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import (
     mean_absolute_error,
@@ -21,6 +22,11 @@ from prodml.features import (
     get_categorical_fill_values,
 )
 from prodml.logging_conf import configure_logging
+from prodml.mlflow_tracking import (
+    configure_mlflow,
+    get_dvc_data_hash,
+    log_training_run,
+)
 from prodml.predict import HousePricePredictor
 
 logger = logging.getLogger(__name__)
@@ -34,149 +40,196 @@ def train_model(
     random_state: int,
     model_version: str,
 ) -> dict[str, float]:
-    """Train and persist the complete House Prices predictor."""
+    """Train, evaluate, persist, and track the House Prices predictor."""
 
-    df = load_data(
-        data_path
-    )
+    # Configure MLflow tracking.
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
 
-    X, y = split_features_target(
-        df,
-        target_column,
-    )
+    mlflow.set_experiment(settings.mlflow_experiment_name)
 
-    X_train, X_val, y_train, y_val = (
-        train_validation_split(
+    with mlflow.start_run():
+
+        # -----------------------------
+        # Load and prepare data
+        # -----------------------------
+
+        df = load_data(data_path)
+
+        X, y = split_features_target(
+            df,
+            target_column,
+        )
+
+        X_train, X_val, y_train, y_val = train_validation_split(
             X,
             y,
             validation_size=validation_size,
             random_state=random_state,
         )
-    )
 
-    numeric_features = (
-        X_train
-        .select_dtypes(
-            include=["number"]
-        )
-        .columns
-        .tolist()
-    )
+        numeric_features = X_train.select_dtypes(include=["number"]).columns.tolist()
 
-    categorical_features = (
-        X_train
-        .select_dtypes(
+        categorical_features = X_train.select_dtypes(
             exclude=["number"]
-        )
-        .columns
-        .tolist()
-    )
+        ).columns.tolist()
 
-    # Learn categorical fill values from training data only.
-    categorical_fill_values = (
-        get_categorical_fill_values(
+        # Learn categorical fill values from training data only.
+        categorical_fill_values = get_categorical_fill_values(
             X_train,
             categorical_features,
         )
-    )
 
-    # Apply the learned values to both training and validation data.
-    X_train = (
-        fill_categorical_missing_values(
+        # Apply learned values to training and validation data.
+        X_train = fill_categorical_missing_values(
             X_train,
             categorical_features,
             categorical_fill_values,
         )
-    )
 
-    X_val = (
-        fill_categorical_missing_values(
+        X_val = fill_categorical_missing_values(
             X_val,
             categorical_features,
             categorical_fill_values,
         )
-    )
 
-    preprocessor = build_preprocessor(
-        numeric_features=numeric_features,
-        categorical_features=categorical_features,
-    )
+        preprocessor = build_preprocessor(
+            numeric_features=numeric_features,
+            categorical_features=categorical_features,
+        )
 
-    model = Pipeline(
-        steps=[
-            (
-                "preprocessor",
-                preprocessor,
-            ),
-            (
-                "regressor",
-                LinearRegression(),
-            ),
-        ]
-    )
+        model = Pipeline(
+            steps=[
+                (
+                    "preprocessor",
+                    preprocessor,
+                ),
+                (
+                    "regressor",
+                    LinearRegression(),
+                ),
+            ]
+        )
 
-    logger.info(
-        "Model training started",
-        extra={
+        # -----------------------------
+        # MLflow parameters and tags
+        # -----------------------------
+
+        mlflow.log_params(
+            {
+                "model_type": "LinearRegression",
+                "target_column": target_column,
+                "validation_size": validation_size,
+                "random_state": random_state,
+                "training_rows": len(X_train),
+                "validation_rows": len(X_val),
+                "numeric_features": len(numeric_features),
+                "categorical_features": len(categorical_features),
+            }
+        )
+
+        mlflow.set_tags(
+            {
+                "model_version": model_version,
+                "project": "prodml-house-prices",
+            }
+        )
+
+        logger.info(
+            "Model training started",
+            extra={
+                "model": "LinearRegression",
+                "training_rows": len(X_train),
+                "validation_rows": len(X_val),
+            },
+        )
+
+        # -----------------------------
+        # Train model
+        # -----------------------------
+
+        model.fit(
+            X_train,
+            y_train,
+        )
+
+        # -----------------------------
+        # Evaluate model
+        # -----------------------------
+
+        predictions = model.predict(X_val)
+
+        mae = mean_absolute_error(
+            y_val,
+            predictions,
+        )
+
+        rmse = (
+            mean_squared_error(
+                y_val,
+                predictions,
+            )
+            ** 0.5
+        )
+
+
+        # -----------------------------
+        # Build production predictor
+        # -----------------------------
+
+        predictor = HousePricePredictor(
+            model=model,
+            categorical_fill_values=(categorical_fill_values),
+            model_version=model_version,
+        )
+
+        model_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        # Save complete predictor artifact.
+        joblib.dump(
+            predictor,
+            model_path,
+        )
+
+
+        logger.info(
+            "Model artifact saved",
+            extra={
+                "model_path": str(model_path),
+            },
+        )
+        # -----------------------------
+        # Log metrics to MLflow
+        # -----------------------------
+
+        
+        dvc_data_hash = get_dvc_data_hash(
+                settings.dvc_file_path
+            )
+        metrics = {
+            "mae": float(mae),
+            "rmse": float(rmse),
+        }
+
+        params = {
+            "random_state": random_state,
+            "validation_size": validation_size,
             "model": "LinearRegression",
-            "training_rows": len(X_train),
-            "validation_rows": len(X_val),
-        },
-    )
+        }
 
-    model.fit(
-        X_train,
-        y_train,
-    )
+        configure_mlflow()
 
-    predictions = model.predict(
-        X_val
-    )
+        log_training_run(
+            model=model,
+            metrics=metrics,
+            params=params,
+            model_path=model_path,
+            dvc_data_hash=dvc_data_hash,
+        )
 
-    mae = mean_absolute_error(
-        y_val,
-        predictions,
-    )
-
-    rmse = mean_squared_error(
-        y_val,
-        predictions,
-    ) ** 0.5
-
-    predictor = HousePricePredictor(
-        model=model,
-        categorical_fill_values=(
-            categorical_fill_values
-        ),
-        model_version=model_version,
-    )
-
-    model_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    # Save the complete predictor artifact.
-    # This contains both the model and the learned
-    # categorical preprocessing information.
-    joblib.dump(
-        predictor,
-        model_path,
-    )
-
-    logger.info(
-        "Model artifact saved",
-        extra={
-            "model_path": str(
-                model_path
-            ),
-        },
-    )
-
-    return {
-        "mae": float(mae),
-        "rmse": float(rmse),
-    }
+        return metrics
 
 
 def main() -> None:
@@ -199,9 +252,7 @@ def main() -> None:
             "model": "LinearRegression",
             "mae": metrics["mae"],
             "rmse": metrics["rmse"],
-            "model_path": str(
-                settings.model_path
-            ),
+            "model_path": str(settings.model_path),
         },
     )
 

@@ -1,8 +1,8 @@
 import json
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import onnxruntime as ort
@@ -37,9 +37,8 @@ def resolve_onnx_column(
         if candidate in features.columns:
             return candidate
 
-    raise KeyError(
-        f"ONNX input '{input_name}' does not match any dataframe column."
-    )
+    raise KeyError(f"ONNX input '{input_name}' does not match any dataframe column.")
+
 
 def benchmark(
     model_fn: Callable[[], object],
@@ -60,18 +59,12 @@ def benchmark(
 
         end = time.perf_counter()
 
-        latencies.append(
-            (end - start) * 1000
-        )
+        latencies.append((end - start) * 1000)
 
-    values = np.asarray(
-        latencies
-    )
+    values = np.asarray(latencies)
 
     return {
-        "mean_ms": float(
-            np.mean(values)
-        ),
+        "mean_ms": float(np.mean(values)),
         "p95_ms": float(
             np.percentile(
                 values,
@@ -89,30 +82,20 @@ def create_onnx_inputs(
 
     inputs = {}
 
-    
-
     for input_meta in session.get_inputs():
         input_name = input_meta.name
 
         column = resolve_onnx_column(input_name, features)
-        values = features[
-            column
-        ].to_numpy()
+        values = features[column].to_numpy()
 
         if input_meta.type == "tensor(float)":
-            values = values.astype(
-                np.float32
-            )
+            values = values.astype(np.float32)
         elif input_meta.type == "tensor(double)":
-            values = values.astype(
-                np.float64
-            )
+            values = values.astype(np.float64)
         elif input_meta.type == "tensor(string)":
             values = values.astype(str)
 
-        inputs[input_name] = (
-            values.reshape(-1, 1)
-        )
+        inputs[input_name] = values.reshape(-1, 1)
 
     return inputs
 
@@ -122,9 +105,7 @@ def main() -> None:
 
     configure_logging()
 
-    df = load_data(
-        settings.data_path
-    )
+    df = load_data(settings.data_path)
 
     X, y = split_features_target(
         df,
@@ -143,15 +124,11 @@ def main() -> None:
         settings.model_version,
     )
 
-    prepared = predictor.prepare_for_onnx(
-        X_val
-    )
+    prepared = predictor.prepare_for_onnx(X_val)
 
     session = ort.InferenceSession(
         str(settings.onnx_model_path),
-        providers=[
-            "CPUExecutionProvider"
-        ],
+        providers=["CPUExecutionProvider"],
     )
 
     onnx_inputs = create_onnx_inputs(
@@ -159,11 +136,7 @@ def main() -> None:
         prepared,
     )
 
-    pickle_result = benchmark(
-        lambda: predictor.model.predict(
-            X_val
-        )
-    )
+    pickle_result = benchmark(lambda: predictor.model.predict(X_val))
 
     onnx_result = benchmark(
         lambda: session.run(
@@ -180,9 +153,7 @@ def main() -> None:
         "onnx": onnx_result,
     }
 
-    output_path = Path(
-        "reports/serialization_benchmark.json"
-    )
+    output_path = Path("reports/serialization_benchmark.json")
 
     output_path.parent.mkdir(
         parents=True,
@@ -200,18 +171,10 @@ def main() -> None:
     logger.info(
         "Serialization benchmark completed",
         extra={
-            "pickle_mean_ms": pickle_result[
-                "mean_ms"
-            ],
-            "pickle_p95_ms": pickle_result[
-                "p95_ms"
-            ],
-            "onnx_mean_ms": onnx_result[
-                "mean_ms"
-            ],
-            "onnx_p95_ms": onnx_result[
-                "p95_ms"
-            ],
+            "pickle_mean_ms": pickle_result["mean_ms"],
+            "pickle_p95_ms": pickle_result["p95_ms"],
+            "onnx_mean_ms": onnx_result["mean_ms"],
+            "onnx_p95_ms": onnx_result["p95_ms"],
         },
     )
 

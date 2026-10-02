@@ -1,6 +1,6 @@
+import json
 from pathlib import Path
 
-import joblib
 import pytest
 from fastapi.testclient import TestClient
 
@@ -12,45 +12,8 @@ from prodml.predict import HousePricePredictor
 @pytest.fixture
 def sample_features() -> dict:
     """Return a valid sample feature set for API and predictor tests."""
-    return {
-        "MSSubClass": 60,
-        "MSZoning": "RL",
-        "LotArea": 8450,
-        "Street": "Pave",
-        "LotShape": "Reg",
-        "LandContour": "Lvl",
-        "Utilities": "AllPub",
-        "LotConfig": "Inside",
-        "LandSlope": "Gtl",
-        "Neighborhood": "CollgCr",
-        "Condition1": "Norm",
-        "Condition2": "Norm",
-        "BldgType": "1Fam",
-        "HouseStyle": "2Story",
-        "OverallQual": 7,
-        "OverallCond": 5,
-        "YearBuilt": 2003,
-        "YearRemodAdd": 2003,
-        "TotalBsmtSF": 856,
-        "GrLivArea": 1710,
-        "FullBath": 2,
-        "HalfBath": 1,
-        "BedroomAbvGr": 3,
-        "KitchenAbvGr": 1,
-        "TotRmsAbvGrd": 8,
-        "Fireplaces": 0,
-        "GarageCars": 2,
-        "GarageArea": 548,
-        "WoodDeckSF": 0,
-        "OpenPorchSF": 61,
-        "EnclosedPorch": 0,
-        "3SsnPorch": 0,
-        "ScreenPorch": 0,
-        "PoolArea": 0,
-        "MiscVal": 0,
-        "MoSold": 2,
-        "YrSold": 2008,
-    }
+    path = Path(__file__).parent / "fixtures" / "house.json"
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="session")

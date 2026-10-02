@@ -76,10 +76,7 @@ def test_predict_batch_endpoint(client, sample_features):
     data = response.json()
 
     assert len(data["predictions"]) == 2
-    assert all(
-        isinstance(value, float)
-        for value in data["predictions"]
-    )
+    assert all(isinstance(value, float) for value in data["predictions"])
     assert "model_version" in data
     assert "correlation_id" in data
     assert data["latency_ms"] >= 0
@@ -89,9 +86,7 @@ def test_predict_validation_error(client):
     """Invalid request data should return HTTP 422."""
     response = client.post(
         "/predict",
-        json={
-            "features": {}
-        },
+        json={"features": {}},
     )
 
     assert response.status_code == 422
@@ -156,10 +151,7 @@ def test_batch_empty_requests(client):
 
 def test_batch_too_large(client, sample_features):
     """A batch larger than the schema limit should be rejected."""
-    requests = [
-        {"features": sample_features}
-        for _ in range(1001)
-    ]
+    requests = [{"features": sample_features} for _ in range(1001)]
 
     response = client.post(
         "/predict/batch",
@@ -182,9 +174,7 @@ def test_feature_validation_error_handler(
         from prodml.predict import FeatureValidationError
 
         predictor.predict_one = MagicMock(
-            side_effect=FeatureValidationError(
-                "Test feature validation error"
-            )
+            side_effect=FeatureValidationError("Test feature validation error")
         )
 
         response = client.post(
@@ -214,9 +204,7 @@ def test_unexpected_error_handler(
 
     try:
         predictor.predict_one = MagicMock(
-            side_effect=RuntimeError(
-                "Simulated internal failure"
-            )
+            side_effect=RuntimeError("Simulated internal failure")
         )
 
         response = client.post(

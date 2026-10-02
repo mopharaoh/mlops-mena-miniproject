@@ -12,17 +12,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    data_path: Path = Path(
-        "data/raw/train.csv"
-    )
+    data_path: Path = Path("data/raw/train.csv")
 
-    model_path: Path = Path(
-        "models/model.pkl"
-    )
+    model_path: Path = Path("models/model.pkl")
 
-    onnx_model_path: Path = Path(
-        "models/model.onnx"
-    )
+    onnx_model_path: Path = Path("models/model.onnx")
 
     target_column: str = "SalePrice"
 
@@ -35,6 +29,13 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
 
     api_port: int = 8000
+
+    mlflow_tracking_uri: str = "http://localhost:5000"
+    mlflow_experiment_name: str = "house-prices"
+
+    dvc_file_path: Path = Path(
+    "data/raw/train.csv.dvc"
+)
 
 
 settings = Settings()

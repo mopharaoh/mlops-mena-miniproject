@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -66,11 +66,7 @@ async def lifespan(
 
     logger.info(
         "Loading model at application startup",
-        extra={
-            "model_path": str(
-                settings.model_path
-            )
-        },
+        extra={"model_path": str(settings.model_path)},
     )
 
     app.state.predictor = load_predictor()
@@ -78,25 +74,20 @@ async def lifespan(
     logger.info(
         "Model loaded successfully",
         extra={
-            "model_version": (
-                app.state.predictor.model_version
-            ),
+            "model_version": (app.state.predictor.model_version),
             "framework": "scikit-learn",
         },
     )
 
     yield
 
-    logger.info(
-        "Application shutdown"
-    )
+    logger.info("Application shutdown")
 
 
 app = FastAPI(
     title="House Prices Prediction API",
     description=(
-        "Production-ready API for House Prices "
-        "prediction using scikit-learn."
+        "Production-ready API for House Prices " "prediction using scikit-learn."
     ),
     version=settings.model_version,
     lifespan=lifespan,
@@ -110,33 +101,20 @@ async def correlation_id_middleware(
 ):
     """Attach a UUID4 correlation ID to every request."""
 
-    correlation_id = str(
-        uuid.uuid4()
-    )
+    correlation_id = str(uuid.uuid4())
 
-    request.state.correlation_id = (
-        correlation_id
-    )
+    request.state.correlation_id = correlation_id
 
-    token = set_correlation_id(
-        correlation_id
-    )
+    token = set_correlation_id(correlation_id)
 
     start_time = time.perf_counter()
 
     try:
-        response = await call_next(
-            request
-        )
+        response = await call_next(request)
 
-        response.headers[
-            "X-Request-ID"
-        ] = correlation_id
+        response.headers["X-Request-ID"] = correlation_id
 
-        latency_ms = (
-            time.perf_counter()
-            - start_time
-        ) * 1000
+        latency_ms = (time.perf_counter() - start_time) * 1000
 
         logger.info(
             "Request completed",
@@ -151,14 +129,10 @@ async def correlation_id_middleware(
         return response
 
     finally:
-        reset_correlation_id(
-            token
-        )
+        reset_correlation_id(token)
 
 
-@app.exception_handler(
-    RequestValidationError
-)
+@app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
@@ -188,9 +162,7 @@ async def validation_exception_handler(
     )
 
 
-@app.exception_handler(
-    FeatureValidationError
-)
+@app.exception_handler(FeatureValidationError)
 async def feature_validation_exception_handler(
     request: Request,
     exc: FeatureValidationError,
@@ -219,9 +191,7 @@ async def feature_validation_exception_handler(
     )
 
 
-@app.exception_handler(
-    Exception
-)
+@app.exception_handler(Exception)
 async def unexpected_exception_handler(
     request: Request,
     exc: Exception,
@@ -278,9 +248,7 @@ async def health(
     return {
         "status": "healthy",
         "model_loaded": True,
-        "model_version": (
-            predictor.model_version
-        ),
+        "model_version": (predictor.model_version),
     }
 
 
@@ -293,26 +261,14 @@ async def metadata(
 ) -> dict[str, Any]:
     """Return model metadata."""
 
-    predictor: HousePricePredictor = (
-        request.app.state.predictor
-    )
+    predictor: HousePricePredictor = request.app.state.predictor
 
     return {
-        "model_version": (
-            predictor.model_version
-        ),
-        "training_date": (
-            settings.model_path
-            .stat()
-            .st_mtime
-        ),
-        "feature_names": (
-            predictor.feature_names
-        ),
+        "model_version": (predictor.model_version),
+        "training_date": (settings.model_path.stat().st_mtime),
+        "feature_names": (predictor.feature_names),
         "framework": "scikit-learn",
-        "artifact_hash": calculate_file_hash(
-            settings.model_path
-        ),
+        "artifact_hash": calculate_file_hash(settings.model_path),
     }
 
 
@@ -327,24 +283,15 @@ async def predict(
 ) -> PredictionResponse:
     """Generate a single house-price prediction."""
 
-    predictor: HousePricePredictor = (
-        request.app.state.predictor
-    )
+    predictor: HousePricePredictor = request.app.state.predictor
 
-    correlation_id = (
-        request.state.correlation_id
-    )
+    correlation_id = request.state.correlation_id
 
     start_time = time.perf_counter()
 
-    prediction = predictor.predict_one(
-        payload.features
-    )
+    prediction = predictor.predict_one(payload.features)
 
-    latency_ms = (
-        time.perf_counter()
-        - start_time
-    ) * 1000
+    latency_ms = (time.perf_counter() - start_time) * 1000
 
     logger.info(
         "Prediction served",
@@ -355,9 +302,7 @@ async def predict(
 
     return PredictionResponse(
         prediction=prediction,
-        model_version=(
-            predictor.model_version
-        ),
+        model_version=(predictor.model_version),
         correlation_id=correlation_id,
         latency_ms=latency_ms,
     )
@@ -374,29 +319,17 @@ async def predict_batch(
 ) -> BatchPredictionResponse:
     """Generate batch house-price predictions."""
 
-    predictor: HousePricePredictor = (
-        request.app.state.predictor
-    )
+    predictor: HousePricePredictor = request.app.state.predictor
 
-    correlation_id = (
-        request.state.correlation_id
-    )
+    correlation_id = request.state.correlation_id
 
     start_time = time.perf_counter()
 
-    features = [
-        item.features
-        for item in payload.requests
-    ]
+    features = [item.features for item in payload.requests]
 
-    predictions = predictor.predict_batch(
-        features
-    )
+    predictions = predictor.predict_batch(features)
 
-    latency_ms = (
-        time.perf_counter()
-        - start_time
-    ) * 1000
+    latency_ms = (time.perf_counter() - start_time) * 1000
 
     logger.info(
         "Batch prediction served",
@@ -408,9 +341,7 @@ async def predict_batch(
 
     return BatchPredictionResponse(
         predictions=predictions,
-        model_version=(
-            predictor.model_version
-        ),
+        model_version=(predictor.model_version),
         correlation_id=correlation_id,
         latency_ms=latency_ms,
     )

@@ -1,7 +1,4 @@
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict, Field
-
 
 EXAMPLE_FEATURES = {
     "MSSubClass": 60,
@@ -48,22 +45,13 @@ class PredictionRequest(BaseModel):
     """Request schema for a single prediction."""
 
     model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "features": EXAMPLE_FEATURES
-            }
-        }
+        json_schema_extra={"example": {"features": EXAMPLE_FEATURES}}
     )
 
-    features: dict[str, Any] = Field(
+    features: dict[str, float | str | None] = Field(
         ...,
         min_length=1,
-        max_length=78,
-        description=(
-            "House Prices feature values. "
-            "Missing features are automatically "
-            "imputed by the trained pipeline."
-        ),
+        description="Model input features (validated against the trained model)",
     )
 
 
@@ -96,15 +84,7 @@ class BatchPredictionRequest(BaseModel):
     """Request schema for batch predictions."""
 
     model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "requests": [
-                    {
-                        "features": EXAMPLE_FEATURES
-                    }
-                ]
-            }
-        }
+        json_schema_extra={"example": {"requests": [{"features": EXAMPLE_FEATURES}]}}
     )
 
     requests: list[PredictionRequest] = Field(

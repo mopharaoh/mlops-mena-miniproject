@@ -27,10 +27,7 @@ def resolve_onnx_column(
         if candidate in features.columns:
             return candidate
 
-    raise KeyError(
-        f"ONNX input '{input_name}' "
-        "does not match any dataframe column."
-    )
+    raise KeyError(f"ONNX input '{input_name}' " "does not match any dataframe column.")
 
 
 def test_pickle_and_onnx_prediction_parity() -> None:
@@ -39,9 +36,7 @@ def test_pickle_and_onnx_prediction_parity() -> None:
     assert settings.model_path.exists()
     assert settings.onnx_model_path.exists()
 
-    df = load_data(
-        settings.data_path
-    )
+    df = load_data(settings.data_path)
 
     X, y = split_features_target(
         df,
@@ -63,19 +58,13 @@ def test_pickle_and_onnx_prediction_parity() -> None:
     # IMPORTANT:
     # Both Pickle and ONNX must receive
     # exactly the same prepared features.
-    prepared = predictor.prepare_for_onnx(
-        X_val
-    )
+    prepared = predictor.prepare_for_onnx(X_val)
 
-    pred_pickle = predictor.model.predict(
-        prepared
-    )
+    pred_pickle = predictor.model.predict(prepared)
 
     session = ort.InferenceSession(
         str(settings.onnx_model_path),
-        providers=[
-            "CPUExecutionProvider"
-        ],
+        providers=["CPUExecutionProvider"],
     )
 
     inputs = {}
@@ -88,26 +77,18 @@ def test_pickle_and_onnx_prediction_parity() -> None:
             prepared,
         )
 
-        values = prepared[
-            column
-        ].to_numpy()
+        values = prepared[column].to_numpy()
 
         if input_meta.type == "tensor(float)":
-            values = values.astype(
-                np.float32
-            )
+            values = values.astype(np.float32)
 
         elif input_meta.type == "tensor(double)":
-            values = values.astype(
-                np.float64
-            )
+            values = values.astype(np.float64)
 
         elif input_meta.type == "tensor(string)":
             values = values.astype(str)
 
-        inputs[input_name] = (
-            values.reshape(-1, 1)
-        )
+        inputs[input_name] = values.reshape(-1, 1)
 
     outputs = session.run(
         None,
@@ -116,9 +97,7 @@ def test_pickle_and_onnx_prediction_parity() -> None:
 
     pred_onnx = outputs[0].reshape(-1)
 
-    assert len(pred_pickle) == len(
-        pred_onnx
-    )
+    assert len(pred_pickle) == len(pred_onnx)
 
     assert np.allclose(
         pred_pickle,
