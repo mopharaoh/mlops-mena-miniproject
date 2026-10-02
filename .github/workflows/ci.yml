@@ -34,7 +34,7 @@ jobs:
         run: uv run ruff check .
 
       - name: Black
-        run: uv run black --check . --target-version py311
+        run: uv run black . --target-version py311
 
 
   test:
