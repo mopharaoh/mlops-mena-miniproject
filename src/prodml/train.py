@@ -171,7 +171,6 @@ def train_model(
             ** 0.5
         )
 
-
         # -----------------------------
         # Build production predictor
         # -----------------------------
@@ -193,7 +192,6 @@ def train_model(
             model_path,
         )
 
-
         logger.info(
             "Model artifact saved",
             extra={
@@ -204,10 +202,7 @@ def train_model(
         # Log metrics to MLflow
         # -----------------------------
 
-        
-        dvc_data_hash = get_dvc_data_hash(
-                settings.dvc_file_path
-            )
+        dvc_data_hash = get_dvc_data_hash(settings.dvc_file_path)
         metrics = {
             "mae": float(mae),
             "rmse": float(rmse),

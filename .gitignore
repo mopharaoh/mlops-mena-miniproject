@@ -11,7 +11,9 @@ __pycache__/
 
 # Data & artifacts 
 dvc-storage/
-models/
+models/*
+!models/model.pkl
+!models/model.onnx
 reports/
 
 # Secrets & logs

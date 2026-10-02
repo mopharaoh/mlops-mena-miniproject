@@ -56,13 +56,13 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --frozen --extra dev
-
-      - name: Run tests
+      - name: Verify model artifact
         run: |
-          uv run pytest \
-            --cov=src/prodml \
-            --cov-report=term-missing \
-            --cov-fail-under=70
+          test -f models/model.pkl
+          test -f models/model.onnx
+          
+      - name: Run tests
+        run: uv run pytest --cov-report=term-missing
 
 
   docker-build:

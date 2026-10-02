@@ -6,9 +6,7 @@ import mlflow
 def main() -> None:
     client = mlflow.MlflowClient()
 
-    experiment = client.get_experiment_by_name(
-        "house-prices"
-    )
+    experiment = client.get_experiment_by_name("house-prices")
 
     if experiment is None:
         print("MLflow experiment not found.")
@@ -20,9 +18,7 @@ def main() -> None:
     )
 
     if len(runs) < 2:
-        print(
-            "Not enough runs for quality comparison."
-        )
+        print("Not enough runs for quality comparison.")
         return
 
     candidate = runs[0]
@@ -38,10 +34,7 @@ def main() -> None:
     print(f"Allowed MAE: {allowed_mae}")
 
     if candidate_mae > allowed_mae:
-        print(
-            "QUALITY GATE FAILED: "
-            "MAE regressed by more than 5%."
-        )
+        print("QUALITY GATE FAILED: " "MAE regressed by more than 5%.")
         sys.exit(1)
 
     print("QUALITY GATE PASSED.")

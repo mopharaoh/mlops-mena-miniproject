@@ -33,9 +33,7 @@ class Settings(BaseSettings):
     mlflow_tracking_uri: str = "http://localhost:5000"
     mlflow_experiment_name: str = "house-prices"
 
-    dvc_file_path: Path = Path(
-    "data/raw/train.csv.dvc"
-)
+    dvc_file_path: Path = Path("data/raw/train.csv.dvc")
 
 
 settings = Settings()
