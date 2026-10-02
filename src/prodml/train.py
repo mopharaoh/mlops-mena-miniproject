@@ -22,6 +22,11 @@ from prodml.features import (
     get_categorical_fill_values,
 )
 from prodml.logging_conf import configure_logging
+from prodml.mlflow_tracking import (
+    configure_mlflow,
+    get_dvc_data_hash,
+    log_training_run,
+)
 from prodml.predict import HousePricePredictor
 
 logger = logging.getLogger(__name__)
@@ -38,13 +43,9 @@ def train_model(
     """Train, evaluate, persist, and track the House Prices predictor."""
 
     # Configure MLflow tracking.
-    mlflow.set_tracking_uri(
-        settings.mlflow_tracking_uri
-    )
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
 
-    mlflow.set_experiment(
-        settings.mlflow_experiment_name
-    )
+    mlflow.set_experiment(settings.mlflow_experiment_name)
 
     with mlflow.start_run():
 
@@ -52,65 +53,43 @@ def train_model(
         # Load and prepare data
         # -----------------------------
 
-        df = load_data(
-            data_path
-        )
+        df = load_data(data_path)
 
         X, y = split_features_target(
             df,
             target_column,
         )
 
-        X_train, X_val, y_train, y_val = (
-            train_validation_split(
-                X,
-                y,
-                validation_size=validation_size,
-                random_state=random_state,
-            )
+        X_train, X_val, y_train, y_val = train_validation_split(
+            X,
+            y,
+            validation_size=validation_size,
+            random_state=random_state,
         )
 
-        numeric_features = (
-            X_train
-            .select_dtypes(
-                include=["number"]
-            )
-            .columns
-            .tolist()
-        )
+        numeric_features = X_train.select_dtypes(include=["number"]).columns.tolist()
 
-        categorical_features = (
-            X_train
-            .select_dtypes(
-                exclude=["number"]
-            )
-            .columns
-            .tolist()
-        )
+        categorical_features = X_train.select_dtypes(
+            exclude=["number"]
+        ).columns.tolist()
 
         # Learn categorical fill values from training data only.
-        categorical_fill_values = (
-            get_categorical_fill_values(
-                X_train,
-                categorical_features,
-            )
+        categorical_fill_values = get_categorical_fill_values(
+            X_train,
+            categorical_features,
         )
 
         # Apply learned values to training and validation data.
-        X_train = (
-            fill_categorical_missing_values(
-                X_train,
-                categorical_features,
-                categorical_fill_values,
-            )
+        X_train = fill_categorical_missing_values(
+            X_train,
+            categorical_features,
+            categorical_fill_values,
         )
 
-        X_val = (
-            fill_categorical_missing_values(
-                X_val,
-                categorical_features,
-                categorical_fill_values,
-            )
+        X_val = fill_categorical_missing_values(
+            X_val,
+            categorical_features,
+            categorical_fill_values,
         )
 
         preprocessor = build_preprocessor(
@@ -143,12 +122,8 @@ def train_model(
                 "random_state": random_state,
                 "training_rows": len(X_train),
                 "validation_rows": len(X_val),
-                "numeric_features": len(
-                    numeric_features
-                ),
-                "categorical_features": len(
-                    categorical_features
-                ),
+                "numeric_features": len(numeric_features),
+                "categorical_features": len(categorical_features),
             }
         )
 
@@ -181,30 +156,21 @@ def train_model(
         # Evaluate model
         # -----------------------------
 
-        predictions = model.predict(
-            X_val
-        )
+        predictions = model.predict(X_val)
 
         mae = mean_absolute_error(
             y_val,
             predictions,
         )
 
-        rmse = mean_squared_error(
-            y_val,
-            predictions,
-        ) ** 0.5
-
-        # -----------------------------
-        # Log metrics to MLflow
-        # -----------------------------
-
-        mlflow.log_metrics(
-            {
-                "mae": float(mae),
-                "rmse": float(rmse),
-            }
+        rmse = (
+            mean_squared_error(
+                y_val,
+                predictions,
+            )
+            ** 0.5
         )
+
 
         # -----------------------------
         # Build production predictor
@@ -212,9 +178,7 @@ def train_model(
 
         predictor = HousePricePredictor(
             model=model,
-            categorical_fill_values=(
-                categorical_fill_values
-            ),
+            categorical_fill_values=(categorical_fill_values),
             model_version=model_version,
         )
 
@@ -229,28 +193,43 @@ def train_model(
             model_path,
         )
 
-        # -----------------------------
-        # Log model artifact to MLflow
-        # -----------------------------
-
-        mlflow.log_artifact(
-            str(model_path),
-            artifact_path="model",
-        )
 
         logger.info(
             "Model artifact saved",
             extra={
-                "model_path": str(
-                    model_path
-                ),
+                "model_path": str(model_path),
             },
         )
+        # -----------------------------
+        # Log metrics to MLflow
+        # -----------------------------
 
-        return {
+        
+        dvc_data_hash = get_dvc_data_hash(
+                settings.dvc_file_path
+            )
+        metrics = {
             "mae": float(mae),
             "rmse": float(rmse),
         }
+
+        params = {
+            "random_state": random_state,
+            "validation_size": validation_size,
+            "model": "LinearRegression",
+        }
+
+        configure_mlflow()
+
+        log_training_run(
+            model=model,
+            metrics=metrics,
+            params=params,
+            model_path=model_path,
+            dvc_data_hash=dvc_data_hash,
+        )
+
+        return metrics
 
 
 def main() -> None:
@@ -273,9 +252,7 @@ def main() -> None:
             "model": "LinearRegression",
             "mae": metrics["mae"],
             "rmse": metrics["rmse"],
-            "model_path": str(
-                settings.model_path
-            ),
+            "model_path": str(settings.model_path),
         },
     )
 

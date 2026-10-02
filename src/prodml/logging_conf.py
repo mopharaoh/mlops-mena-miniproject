@@ -4,12 +4,9 @@ import sys
 
 from pythonjsonlogger import jsonlogger
 
-
-correlation_id_context: contextvars.ContextVar[str] = (
-    contextvars.ContextVar(
-        "correlation_id",
-        default="system",
-    )
+correlation_id_context: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "correlation_id",
+    default="system",
 )
 
 
@@ -18,9 +15,7 @@ def set_correlation_id(
 ) -> contextvars.Token[str]:
     """Set the correlation ID for the current context."""
 
-    return correlation_id_context.set(
-        correlation_id
-    )
+    return correlation_id_context.set(correlation_id)
 
 
 def reset_correlation_id(
@@ -38,9 +33,7 @@ class CorrelationIdFilter(logging.Filter):
         self,
         record: logging.LogRecord,
     ) -> bool:
-        record.correlation_id = (
-            correlation_id_context.get()
-        )
+        record.correlation_id = correlation_id_context.get()
 
         return True
 
@@ -48,19 +41,14 @@ class CorrelationIdFilter(logging.Filter):
 def configure_logging() -> None:
     """Configure structured JSON logging."""
 
-    handler = logging.StreamHandler(
-        sys.stdout
-    )
+    handler = logging.StreamHandler(sys.stdout)
 
     formatter = jsonlogger.JsonFormatter(
-        "%(asctime)s %(levelname)s %(name)s "
-        "%(message)s %(correlation_id)s"
+        "%(asctime)s %(levelname)s %(name)s " "%(message)s %(correlation_id)s"
     )
 
     handler.setFormatter(formatter)
-    handler.addFilter(
-        CorrelationIdFilter()
-    )
+    handler.addFilter(CorrelationIdFilter())
 
     root_logger = logging.getLogger()
 
@@ -68,6 +56,4 @@ def configure_logging() -> None:
 
     root_logger.addHandler(handler)
 
-    root_logger.setLevel(
-        logging.INFO
-    )
+    root_logger.setLevel(logging.INFO)

@@ -27,31 +27,23 @@ def export_to_onnx(
 ) -> None:
     """Export the fitted sklearn pipeline to ONNX."""
 
-    prepared = predictor.prepare_for_onnx(
-        sample_features
-    )
+    prepared = predictor.prepare_for_onnx(sample_features)
 
     initial_types = []
 
     for column in predictor.feature_names:
-        if pd.api.types.is_numeric_dtype(
-            prepared[column]
-        ):
+        if pd.api.types.is_numeric_dtype(prepared[column]):
             initial_types.append(
                 (
                     column,
-                    FloatTensorType(
-                        [None, 1]
-                    ),
+                    FloatTensorType([None, 1]),
                 )
             )
         else:
             initial_types.append(
                 (
                     column,
-                    StringTensorType(
-                        [None, 1]
-                    ),
+                    StringTensorType([None, 1]),
                 )
             )
 
@@ -66,16 +58,12 @@ def export_to_onnx(
         exist_ok=True,
     )
 
-    output_path.write_bytes(
-        onnx_model.SerializeToString()
-    )
+    output_path.write_bytes(onnx_model.SerializeToString())
 
     logger.info(
         "ONNX model exported",
         extra={
-            "output_path": str(
-                output_path
-            ),
+            "output_path": str(output_path),
         },
     )
 
@@ -85,9 +73,7 @@ def main() -> None:
 
     configure_logging()
 
-    df = load_data(
-        settings.data_path
-    )
+    df = load_data(settings.data_path)
 
     X, y = split_features_target(
         df,
